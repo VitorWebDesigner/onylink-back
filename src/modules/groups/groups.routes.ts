@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { decodePayload } from '../../middlewares/payload';
 import { validate } from '../../middlewares/validate';
-import { requireAuth, requireRole, optionalAuth } from '../../middlewares/auth';
+import { requireAuth, optionalAuth } from '../../middlewares/auth';
 import { asyncHandler } from '../../middlewares/error';
 import { groupsController } from './groups.controller';
 import { createGroupSchema } from './groups.schema';
@@ -11,10 +11,10 @@ const router = Router();
 router.get('/', optionalAuth, asyncHandler(groupsController.list));
 router.get('/:slug', optionalAuth, asyncHandler(groupsController.detail));
 
+// criação: ADMIN ou conta PROFISSIONAL (gate no service — CLAUDE.md §8)
 router.post(
   '/',
   requireAuth,
-  requireRole('ADMIN'),
   decodePayload,
   validate(createGroupSchema),
   asyncHandler(groupsController.create),

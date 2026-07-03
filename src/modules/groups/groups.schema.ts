@@ -13,6 +13,8 @@ export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 export const listGroupsSchema = z.object({
   segment: z.string().max(120).optional(),
   city: z.string().max(120).optional(),
+  /** true → só os grupos em que o usuário é membro ("Meus grupos"). */
+  mine: z.coerce.boolean().optional(),
   limit: z.coerce.number().min(1).max(100).default(50),
   offset: z.coerce.number().min(0).default(0),
 });

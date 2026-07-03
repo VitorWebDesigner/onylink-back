@@ -7,12 +7,12 @@ import { listGroupsSchema, type CreateGroupInput } from './groups.schema';
 export const groupsController = {
   async list(req: Request, res: Response) {
     const input = listGroupsSchema.parse(req.query);
-    const data = await groupsService.list(input);
+    const data = await groupsService.list(input, req.user?.id);
     send(res, true, data, 'ok');
   },
 
   async detail(req: Request, res: Response) {
-    const data = await groupsService.bySlug(req.params.slug!);
+    const data = await groupsService.detail(req.params.slug!, req.user?.id);
     send(res, true, data, 'ok');
   },
 
