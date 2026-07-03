@@ -10,7 +10,7 @@ export const opportunitiesModel = {
   // Lista APROVADAS com filtros opcionais (NULL = ignora). $6 = id do usuário logado
   // (ou uuid nil) para calcular `liked`. Inclui contadores de curtida/comentário.
   list: () => `
-    SELECT o.id, o.kind, o.title, o.description, o.city, o.segment, o.created_at,
+    SELECT o.id, o.author_id, o.kind, o.title, o.description, o.city, o.segment, o.created_at,
            u.name AS author_name,
            (SELECT count(*) FROM opportunity_likes l WHERE l.opportunity_id = o.id)::int AS like_count,
            (SELECT count(*) FROM opportunity_comments c WHERE c.opportunity_id = o.id)::int AS comment_count,

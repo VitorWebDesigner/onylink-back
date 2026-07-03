@@ -6,7 +6,7 @@
 const topCommentLateral = (viewer: string | null) => `
     LEFT JOIN LATERAL (
       SELECT c.id, c.content, c.like_count, c.insight_count, c.repost_count, c.share_count,
-             cu.name AS author_name${viewer ? `,
+             cu.id AS author_id, cu.name AS author_name${viewer ? `,
              EXISTS (SELECT 1 FROM comment_likes cl    WHERE cl.comment_id = c.id AND cl.user_id = ${viewer}) AS liked,
              EXISTS (SELECT 1 FROM comment_insights ci WHERE ci.comment_id = c.id AND ci.user_id = ${viewer}) AS insighted,
              EXISTS (SELECT 1 FROM comment_reposts cr  WHERE cr.comment_id = c.id AND cr.user_id = ${viewer}) AS reposted,
@@ -26,6 +26,7 @@ const MEDIA_JSON = `
 // Colunas do comentário-destaque expostas no SELECT do feed/busca (com estado do leitor).
 const TOP_COMMENT_COLS = `
            tc.id AS top_comment_id, tc.content AS top_comment_content,
+           tc.author_id AS top_comment_author_id,
            tc.author_name AS top_comment_author, tc.like_count AS top_comment_like_count,
            tc.insight_count AS top_comment_insight_count, tc.repost_count AS top_comment_repost_count,
            tc.share_count AS top_comment_share_count, tc.liked AS top_comment_liked,
