@@ -1,16 +1,18 @@
 import { query, queryOne } from '../../core/db';
 import { ApiError } from '../../core/http';
-import { notify } from '../notifications/notifications';
+import { notify, notifyEvents } from '../notifications/notifications.service';
 import { connectionsModel as M } from './connections.model';
 
 export const connectionsService = {
   async follow(me: string, target: string) {
     if (me === target) throw new ApiError('Você não pode seguir a si mesmo.', 400);
     await query(M.follow(), [me, target]);
+    void notifyEvents.follow(target, me);
     return { following: true };
   },
   async unfollow(me: string, target: string) {
     await query(M.unfollow(), [me, target]);
+    void notifyEvents.removeFollow(target, me);
     return { following: false };
   },
 

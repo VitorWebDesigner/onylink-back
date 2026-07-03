@@ -2,6 +2,7 @@ import { query, queryOne, withTransaction } from '../../core/db';
 import { ApiError } from '../../core/http';
 import { publicUrl } from '../../core/storage/bunny';
 import { signedStream } from '../../core/storage/bunnyStream';
+import { notifyEvents } from '../notifications/notifications.service';
 import { postsModel as M } from './posts.model';
 import type { CommentInput, CreatePostInput, FeedQuery, UpdatePostInput } from './posts.schema';
 
@@ -165,24 +166,36 @@ export const postsService = {
 
   async like(postId: string, userId: string) {
     const inserted = await queryOne(M.like(), [postId, userId]);
-    if (inserted) await query(M.bumpLike(), [postId, 1]);
+    if (inserted) {
+      await query(M.bumpLike(), [postId, 1]);
+      void notifyEvents.postReaction('LIKE', postId, userId);
+    }
     return { liked: true };
   },
 
   async unlike(postId: string, userId: string) {
     const removed = await queryOne(M.unlike(), [postId, userId]);
-    if (removed) await query(M.bumpLike(), [postId, -1]);
+    if (removed) {
+      await query(M.bumpLike(), [postId, -1]);
+      void notifyEvents.removePostReaction('LIKE', postId, userId);
+    }
     return { liked: false };
   },
 
   async repost(postId: string, userId: string) {
     const r = await queryOne(M.repost(), [postId, userId]);
-    if (r) await query(M.bumpRepost(), [postId, 1]);
+    if (r) {
+      await query(M.bumpRepost(), [postId, 1]);
+      void notifyEvents.postReaction('REPOST', postId, userId);
+    }
     return { reposted: true };
   },
   async unrepost(postId: string, userId: string) {
     const r = await queryOne(M.unrepost(), [postId, userId]);
-    if (r) await query(M.bumpRepost(), [postId, -1]);
+    if (r) {
+      await query(M.bumpRepost(), [postId, -1]);
+      void notifyEvents.removePostReaction('REPOST', postId, userId);
+    }
     return { reposted: false };
   },
   async share(postId: string, userId: string) {
@@ -197,12 +210,18 @@ export const postsService = {
   },
   async insight(postId: string, userId: string) {
     const r = await queryOne(M.insight(), [postId, userId]);
-    if (r) await query(M.bumpInsight(), [postId, 1]);
+    if (r) {
+      await query(M.bumpInsight(), [postId, 1]);
+      void notifyEvents.postReaction('INSIGHT', postId, userId);
+    }
     return { insighted: true };
   },
   async uninsight(postId: string, userId: string) {
     const r = await queryOne(M.uninsight(), [postId, userId]);
-    if (r) await query(M.bumpInsight(), [postId, -1]);
+    if (r) {
+      await query(M.bumpInsight(), [postId, -1]);
+      void notifyEvents.removePostReaction('INSIGHT', postId, userId);
+    }
     return { insighted: false };
   },
 
@@ -229,6 +248,8 @@ export const postsService = {
       if (input.parentId) await client.query(M.bumpReply(), [input.parentId, 1]);
       return rows[0];
     });
+    const created = c as { id: string } | undefined;
+    if (created?.id) void notifyEvents.comment(postId, authorId, input.content, created.id, input.parentId);
     return c;
   },
 

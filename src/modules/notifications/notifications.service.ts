@@ -1,25 +1,85 @@
 import { query, queryOne } from '../../core/db';
+import { logger } from '../../core/logger';
 import { notificationsModel as M } from './notifications.model';
 
 export type NotificationType =
-  | 'LIKE'
-  | 'COMMENT'
-  | 'CONNECTION'
-  | 'MESSAGE'
-  | 'POST_APPROVED'
-  | 'POST_REJECTED';
+  | 'LIKE' | 'INSIGHT' | 'REPOST'            // reações no post (dedupe + des-toggle apaga)
+  | 'COMMENT' | 'REPLY' | 'SUBSCRIBED'       // comentário no seu post / resposta / post que você acompanha
+  | 'FOLLOW'                                 // novo seguidor (dedupe)
+  | 'APPLICATION'                            // candidatura na sua oportunidade
+  | 'CONNECTION' | 'CONNECTION_ACCEPTED' | 'MESSAGE' | 'POST_APPROVED' | 'POST_REJECTED'; // legado/futuro
+
+export interface NotifyPayload {
+  actorId?: string;
+  postId?: string;
+  commentId?: string;
+  opportunityId?: string;
+  preview?: string;
+  [k: string]: unknown;
+}
 
 /**
- * Helper compartilhado: outros módulos importam isto para criar notificações.
- * Ex.: import { createNotification } from '../notifications/notifications.service'
+ * Cria uma notificação (best-effort — NUNCA quebra o fluxo principal).
+ * Não notifica a si mesmo. Reações/follow são dedupadas pelos índices da 018.
  */
-export async function createNotification(
-  userId: string,
-  type: NotificationType,
-  payload: Record<string, unknown> = {},
-): Promise<void> {
-  await query(M.insert(), [userId, type, JSON.stringify(payload)]);
+export async function notify(userId: string, type: NotificationType, payload: NotifyPayload = {}): Promise<void> {
+  try {
+    if (payload.actorId && payload.actorId === userId) return;
+    await query(M.insert(), [userId, type, JSON.stringify(payload)]);
+  } catch (err) {
+    logger.warn({ err, type }, 'notify falhou (ignorado)');
+  }
 }
+
+const preview = (s: string | null | undefined, max = 90) => (s ? (s.length > max ? `${s.slice(0, max - 1)}…` : s) : undefined);
+
+/** Emissores usados pelos outros módulos (posts, connections, opportunities). */
+export const notifyEvents = {
+  /** Curtida/insight/repost no post → autor. */
+  async postReaction(type: 'LIKE' | 'INSIGHT' | 'REPOST', postId: string, actorId: string) {
+    const post = await queryOne<{ author_id: string }>(M.postAuthor(), [postId]).catch(() => null);
+    if (post) await notify(post.author_id, type, { actorId, postId });
+  },
+
+  /** Des-toggle da reação → apaga a notificação correspondente. */
+  async removePostReaction(type: 'LIKE' | 'INSIGHT' | 'REPOST', postId: string, actorId: string) {
+    await query(M.deleteReaction(), [type, actorId, postId]).catch(() => undefined);
+  },
+
+  /** Comentário → autor do post; resposta → autor do comentário pai; inscritos → SUBSCRIBED. */
+  async comment(postId: string, actorId: string, content: string, commentId: string, parentId?: string | null) {
+    const p = preview(content);
+    const post = await queryOne<{ author_id: string }>(M.postAuthor(), [postId]).catch(() => null);
+    if (post) await notify(post.author_id, 'COMMENT', { actorId, postId, commentId, preview: p });
+
+    if (parentId) {
+      const parent = await queryOne<{ author_id: string }>(M.commentAuthor(), [parentId]).catch(() => null);
+      if (parent && parent.author_id !== post?.author_id) {
+        await notify(parent.author_id, 'REPLY', { actorId, postId, commentId, preview: p });
+      }
+    }
+
+    const subs = await query<{ user_id: string }>(M.postSubscribers(), [postId]).catch(() => []);
+    for (const s of subs) {
+      if (s.user_id === post?.author_id) continue; // autor já recebeu COMMENT
+      await notify(s.user_id, 'SUBSCRIBED', { actorId, postId, commentId, preview: p });
+    }
+  },
+
+  /** Novo seguidor → seguido (dedupe); deixar de seguir apaga. */
+  async follow(targetId: string, actorId: string) {
+    await notify(targetId, 'FOLLOW', { actorId });
+  },
+  async removeFollow(targetId: string, actorId: string) {
+    await query(M.deleteFollow(), [targetId, actorId]).catch(() => undefined);
+  },
+
+  /** Candidatura → dono da oportunidade (preview = título). */
+  async application(opportunityId: string, actorId: string) {
+    const opp = await queryOne<{ author_id: string; title: string }>(M.opportunityMeta(), [opportunityId]).catch(() => null);
+    if (opp) await notify(opp.author_id, 'APPLICATION', { actorId, opportunityId, preview: preview(opp.title) });
+  },
+};
 
 export const notificationsService = {
   async list(userId: string, limit = 30, offset = 0) {

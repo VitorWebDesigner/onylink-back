@@ -10,7 +10,7 @@ import { decodePayload } from '../../middlewares/payload';
 import { validate, validateQuery, body } from '../../middlewares/validate';
 import { requireAuth, requireRole } from '../../middlewares/auth';
 import { asyncHandler } from '../../middlewares/error';
-import { notify } from '../notifications/notifications';
+import { notify } from '../notifications/notifications.service';
 import { logger } from '../../core/logger';
 
 /* ── schemas ── */

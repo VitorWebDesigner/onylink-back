@@ -1,5 +1,6 @@
 import { query, queryOne } from '../../core/db';
 import { ApiError } from '../../core/http';
+import { notifyEvents } from '../notifications/notifications.service';
 import { opportunitiesModel as M } from './opportunities.model';
 import type { ApplyOpportunityInput, CreateOpportunityInput, ListOpportunityQuery, UpdateApplicationInput } from './opportunities.schema';
 
@@ -30,6 +31,7 @@ export const opportunitiesService = {
 
   async apply(id: string, userId: string, input: ApplyOpportunityInput) {
     const row = await queryOne<{ id: string }>(M.apply(), [id, userId, JSON.stringify(input.answers ?? [])]);
+    if (row?.id) void notifyEvents.application(id, userId);
     return { id: row?.id ?? null, applied: true };
   },
 
