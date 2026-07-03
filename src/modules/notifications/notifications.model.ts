@@ -1,10 +1,12 @@
 /** SQL do módulo notifications (tabela: user_id, type, payload jsonb — 001 + índices 018). */
 export const notificationsModel = {
   // ON CONFLICT DO NOTHING cobre os índices únicos parciais (reação/follow — 018).
+  // RETURNING id → só dispara PUSH quando a linha foi de fato criada (dedupe não re-pusha).
   insert: () => `
     INSERT INTO notifications (user_id, type, payload)
     VALUES ($1, $2, $3)
-    ON CONFLICT DO NOTHING`,
+    ON CONFLICT DO NOTHING
+    RETURNING id`,
 
   // "des-toggle" (descurtir/desrepostar/tirar insight) apaga a notificação da reação
   deleteReaction: () => `
@@ -35,6 +37,16 @@ export const notificationsModel = {
 
   markAllRead: () => `
     UPDATE notifications SET read_at = now() WHERE user_id = $1 AND read_at IS NULL`,
+
+  /* push tokens (Expo) */
+  upsertPushToken: () => `
+    INSERT INTO push_tokens (token, user_id, platform)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (token) DO UPDATE SET user_id = $2, platform = $3, updated_at = now()`,
+  deletePushToken: () => `DELETE FROM push_tokens WHERE token = $1 AND user_id = $2`,
+  pushTokensByUser: () => `SELECT token FROM push_tokens WHERE user_id = $1`,
+  purgePushToken: () => `DELETE FROM push_tokens WHERE token = $1`,
+  actorName: () => `SELECT name FROM users WHERE id = $1`,
 
   /* lookups p/ descobrir destinatários da emissão */
   postAuthor: () => `SELECT author_id FROM posts WHERE id = $1`,

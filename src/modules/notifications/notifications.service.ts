@@ -1,5 +1,6 @@
 import { query, queryOne } from '../../core/db';
 import { logger } from '../../core/logger';
+import { enqueue } from '../../core/queue';
 import { notificationsModel as M } from './notifications.model';
 
 export type NotificationType =
@@ -21,11 +22,15 @@ export interface NotifyPayload {
 /**
  * Cria uma notificação (best-effort — NUNCA quebra o fluxo principal).
  * Não notifica a si mesmo. Reações/follow são dedupadas pelos índices da 018.
+ * Linha criada de fato → enfileira PUSH (worker envia via Expo Push Service).
  */
 export async function notify(userId: string, type: NotificationType, payload: NotifyPayload = {}): Promise<void> {
   try {
     if (payload.actorId && payload.actorId === userId) return;
-    await query(M.insert(), [userId, type, JSON.stringify(payload)]);
+    const inserted = await queryOne<{ id: string }>(M.insert(), [userId, type, JSON.stringify(payload)]);
+    if (inserted) {
+      await enqueue('notifications', 'push', { userId, type, payload }).catch(() => undefined);
+    }
   } catch (err) {
     logger.warn({ err, type }, 'notify falhou (ignorado)');
   }
@@ -84,6 +89,17 @@ export const notifyEvents = {
 export const notificationsService = {
   async list(userId: string, limit = 30, offset = 0) {
     return query(M.list(), [userId, limit, offset]);
+  },
+
+  /** Registra/atualiza o token do aparelho (Expo Push). */
+  async registerPushToken(userId: string, token: string, platform?: string) {
+    await query(M.upsertPushToken(), [token, userId, platform ?? null]);
+    return { registered: true };
+  },
+
+  async unregisterPushToken(userId: string, token: string) {
+    await query(M.deletePushToken(), [token, userId]);
+    return { registered: false };
   },
 
   async unreadCount(userId: string) {
