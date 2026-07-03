@@ -1,5 +1,8 @@
 export const usersModel = {
-  // $1 = alvo, $2 = viewer (nil p/ guest) para calcular `followed`.
+  // $1 = alvo (uuid OU @handle — Fase 4: menções na bio navegam por handle),
+  // $2 = viewer (nil p/ guest) para calcular `followed`.
+  // Selos AUTOMÁTICOS por regra (Fase 4): Conector = 50+ seguidores;
+  // Autoridade = 100+ insights recebidos nos posts. Calculados no read.
   publicProfile: () => `
     SELECT u.id, u.name, u.handle, u.role, u.created_at, u.verified, u.professional,
            p.avatar_path, p.cover_path, p.bio, p.role_title, p.segment, p.city, p.state,
@@ -9,11 +12,14 @@ export const usersModel = {
            EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = $2 AND f.followee_id = u.id) AS followed,
            (SELECT count(*) FROM follows f WHERE f.followee_id = u.id)::int AS followers_count,
            (SELECT count(*) FROM follows f WHERE f.follower_id = u.id)::int AS following_count,
-           (SELECT count(*) FROM posts po WHERE po.author_id = u.id AND po.status = 'APPROVED')::int AS posts_count
+           (SELECT count(*) FROM posts po WHERE po.author_id = u.id AND po.status = 'APPROVED')::int AS posts_count,
+           ((SELECT count(*) FROM follows f WHERE f.followee_id = u.id) >= 50) AS badge_connector,
+           ((SELECT count(*) FROM post_insights pi JOIN posts po ON po.id = pi.post_id
+              WHERE po.author_id = u.id) >= 100) AS badge_authority
     FROM users u
     LEFT JOIN profiles p ON p.user_id = u.id
     LEFT JOIN companies c ON c.id = p.company_id
-    WHERE u.id = $1 AND u.active = true
+    WHERE (u.id::text = $1 OR u.handle = lower($1)) AND u.active = true
     LIMIT 1`,
 
   // Garante a linha do perfil antes do UPDATE (usuários antigos podem não ter).
