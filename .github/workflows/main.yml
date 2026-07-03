@@ -1,0 +1,41 @@
+name: Deploy VPS
+
+on:
+  push:
+    branches:
+      - branch-name
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate docker-compose
+        run: docker compose -f docker-compose.yml config
+
+      - name: Build image from Dockerfile
+        run: docker build -t `{imagem} -f Dockerfile .
+
+      - name: Build app service from docker-compose
+        run: docker compose -f docker-compose.yml build app
+
+      - name: Deploy on VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ${{ secrets.VPS_APP_DIR }}
+            git checkout master
+            git pull origin master --ff-only
+            docker compose down
+            docker rm -f {container} || true
+            docker compose up -d --build

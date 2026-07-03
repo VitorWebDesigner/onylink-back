@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: onylink-postgres
+    environment:
+      POSTGRES_DB: ${PGDATABASE:-onylink}
+      POSTGRES_USER: ${PGUSER:-onylink}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-change-me}
+      TZ: America/Fortaleza
+    ports:
+      - "${PGPORT:-5432}:5432"
+    volumes:
+      - onylink_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-onylink}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: onylink-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - onylink_redis:/data
+    restart: unless-stopped
+
+  # API — descomente para subir a API em container (build de produção).
+  # Em dev usamos `npm run dev` na máquina host.
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: onylink-api
+  #   env_file: .env
+  #   ports:
+  #     - "${PORT:-4444}:4444"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_started
+  #   restart: unless-stopped
+
+volumes:
+  onylink_pg:
+  onylink_redis:
