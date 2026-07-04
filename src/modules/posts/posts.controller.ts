@@ -38,6 +38,11 @@ export const postsController = {
     send(res, true, data, 'ok');
   },
 
+  // Post mais recente do feed geral (pill "Novas publicações" no app).
+  async latest(_req: Request, res: Response) {
+    send(res, true, await postsService.latestId(), 'ok');
+  },
+
   // Polling de contadores ao vivo (item 2). ?ids=uuid,uuid,... (máx 60, só uuids válidos).
   async live(req: Request, res: Response) {
     const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

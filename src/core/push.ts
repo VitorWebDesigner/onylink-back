@@ -20,6 +20,11 @@ function buildMessage(type: NotificationType, actorName: string, payload: Notify
     case 'APPLICATION': return { title: 'Nova candidatura', body: `${actorName} se candidatou à${preview}`, url: payload.opportunityId ? `/opportunity/applications/${payload.opportunityId}` : '/notifications' };
     case 'JOIN_REQUEST': return { title: 'Pedido de entrada', body: `${actorName} quer entrar em${preview}`, url: payload.groupId ? `/group/${payload.groupId}` : '/notifications' };
     case 'JOIN_APPROVED': return { title: 'Bem-vindo!', body: `Seu pedido para entrar em${preview} foi aprovado`, url: payload.groupId ? `/group/${payload.groupId}` : '/notifications' };
+    case 'GROUP_POST': return {
+      title: typeof payload.groupName === 'string' && payload.groupName ? payload.groupName : 'Nova publicação na comunidade',
+      body: `${actorName} publicou${preview}`,
+      url: payload.groupId ? `/group/${payload.groupId}` : `/post/${payload.postId}`,
+    };
     default: return null; // legados (CONNECTION etc.) sem push por enquanto
   }
 }

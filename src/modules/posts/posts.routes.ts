@@ -20,6 +20,7 @@ router.get('/', optionalAuth, validateQuery(feedQuerySchema), asyncHandler(posts
 router.get('/saved', requireAuth, validateQuery(pageSchema), asyncHandler(postsController.listSaved));
 router.get('/search', optionalAuth, asyncHandler(postsController.search));
 router.get('/live', asyncHandler(postsController.live));
+router.get('/latest', asyncHandler(postsController.latest));
 router.get('/:id', optionalAuth, asyncHandler(postsController.getOne));
 router.get('/:id/comments', optionalAuth, validateQuery(pageSchema), asyncHandler(postsController.listComments));
 

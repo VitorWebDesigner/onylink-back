@@ -9,6 +9,7 @@ export type NotificationType =
   | 'FOLLOW'                                 // novo seguidor (dedupe)
   | 'APPLICATION'                            // candidatura na sua oportunidade
   | 'JOIN_REQUEST' | 'JOIN_APPROVED'         // comunidade privada: pedido / aprovação
+  | 'GROUP_POST'                             // nova publicação na comunidade → todos os membros
   | 'CONNECTION' | 'CONNECTION_ACCEPTED' | 'MESSAGE' | 'POST_APPROVED' | 'POST_REJECTED'; // legado/futuro
 
 export interface NotifyPayload {
@@ -100,6 +101,23 @@ export const notifyEvents = {
   /** Pedido aprovado → quem pediu. */
   async joinApproved(groupId: string, groupName: string, targetId: string, actorId: string) {
     await notify(targetId, 'JOIN_APPROVED', { actorId, groupId, preview: preview(groupName) });
+  },
+
+  /** Nova publicação na comunidade → TODOS os membros (menos o autor). */
+  async groupPost(groupId: string, postId: string, actorId: string, content?: string | null) {
+    const group = await queryOne<{ name: string }>(
+      'SELECT name FROM groups WHERE id = $1', [groupId],
+    ).catch(() => null);
+    const members = await query<{ user_id: string }>(
+      'SELECT user_id FROM group_members WHERE group_id = $1', [groupId],
+    ).catch(() => []);
+    for (const m of members) {
+      await notify(m.user_id, 'GROUP_POST', {
+        actorId, postId, groupId,
+        groupName: group?.name,
+        preview: preview(content),
+      });
+    }
   },
 };
 

@@ -88,6 +88,8 @@ export const postsService = {
     });
 
     // Post imediato (como Instagram/X/Threads) — sem fila de moderação.
+    // Publicação em comunidade → notifica (in-app + push) todos os membros.
+    if (input.groupId) void notifyEvents.groupPost(input.groupId, post.id, authorId, input.content);
     return post;
   },
 
@@ -178,6 +180,12 @@ export const postsService = {
     return query<PostRow>(M.liveCounts(), [ids]);
   },
 
+  /** Id do post mais recente do feed geral (pill "Novas publicações"). */
+  async latestId() {
+    const row = await queryOne<{ id: string }>(M.latestFeedPostId());
+    return { id: row?.id ?? null };
+  },
+
   /** Registra 1 view do usuário (dedupe) e devolve a contagem atual. */
   async recordView(postId: string, userId: string) {
     const inserted = await queryOne(M.recordView(), [postId, userId]);
@@ -214,6 +222,15 @@ export const postsService = {
   },
 
   async repost(postId: string, userId: string) {
+    // Post de comunidade NÃO destacado: só o DONO da comunidade reposta
+    // (repostar publica no perfil/feed — vazaria conteúdo interno). Decisão do dono.
+    const meta = await queryOne<{ group_id: string | null; featured_at: Date | null; created_by: string | null }>(
+      'SELECT p.group_id, p.featured_at, g.created_by FROM posts p LEFT JOIN groups g ON g.id = p.group_id WHERE p.id = $1',
+      [postId],
+    );
+    if (meta?.group_id && !meta.featured_at && meta.created_by !== userId) {
+      throw new ApiError('Só o dono da comunidade pode repostar esta publicação.', 403);
+    }
     const r = await queryOne(M.repost(), [postId, userId]);
     if (r) {
       await query(M.bumpRepost(), [postId, 1]);

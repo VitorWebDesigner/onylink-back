@@ -57,7 +57,8 @@ export const postsModel = {
   getByIdFull: () => `
     SELECT p.id, p.author_id, p.category, p.content, p.like_count, p.comment_count,
            p.repost_count, p.share_count, p.insight_count, p.view_count, p.created_at,
-           p.group_id, p.featured_at, fg.name AS community_name, fu.name AS featured_by_name,
+           p.group_id, p.featured_at, fg.name AS community_name, fg.created_by AS community_owner_id,
+           fu.name AS featured_by_name,
            (p.pinned_at IS NOT NULL) AS pinned,
            u.name AS author_name, pr.avatar_path AS author_avatar,
            EXISTS (SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1) AS liked,
@@ -95,7 +96,8 @@ export const postsModel = {
   feed: () => `
     SELECT p.id, p.author_id, p.category, p.content, p.like_count, p.comment_count,
            p.repost_count, p.share_count, p.insight_count, p.view_count, p.created_at,
-           p.group_id, p.featured_at, fg.name AS community_name, fu.name AS featured_by_name,
+           p.group_id, p.featured_at, fg.name AS community_name, fg.created_by AS community_owner_id,
+           fu.name AS featured_by_name,
            u.name AS author_name, pr.avatar_path AS author_avatar,
            EXISTS (SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1) AS liked,
            EXISTS (SELECT 1 FROM saved_posts s WHERE s.post_id = p.id AND s.user_id = $1) AS saved,
@@ -215,6 +217,13 @@ export const postsModel = {
     WHERE p.id = ANY($1::uuid[])`,
 
   mediaForPost: () => `SELECT type, path, position FROM post_media WHERE post_id = $1 ORDER BY position`,
+
+  // Id do post APROVADO mais recente visível no feed geral (pill "Novas
+  // publicações" do app — checagem barata a cada rodada do polling).
+  latestFeedPostId: () => `
+    SELECT id FROM posts
+    WHERE status = 'APPROVED' AND (group_id IS NULL OR featured_at IS NOT NULL)
+    ORDER BY created_at DESC LIMIT 1`,
 
   /* reações */
   like: () => `
