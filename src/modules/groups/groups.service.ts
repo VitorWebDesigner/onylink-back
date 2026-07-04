@@ -115,6 +115,11 @@ export const groupsService = {
   },
 
   async leave(groupId: string, userId: string) {
+    // DONO (created_by) não sai: precisa transferir a propriedade antes (decisão do dono).
+    const owner = await queryOne<{ created_by: string }>(M.ownerOf(), [groupId]);
+    if (owner?.created_by === userId) {
+      throw new ApiError('Você é o dono da comunidade. Transfira a propriedade para outro admin antes de sair.', 409);
+    }
     return withTransaction(async (client) => {
       const { rows } = await client.query(M.removeMember(), [groupId, userId]);
       if (rows.length > 0) await client.query(M.bumpMemberCount(), [groupId, -1]);
@@ -124,8 +129,31 @@ export const groupsService = {
     });
   },
 
-  async members(groupId: string, limit = 50, offset = 0) {
-    return query(M.members(), [groupId, limit, offset]);
+  /** Promove um membro a ADMIN (só admin pode). */
+  async promote(groupId: string, adminId: string, targetId: string) {
+    await requireAdmin(groupId, adminId);
+    const row = await queryOne(M.setRole(), [groupId, targetId, 'ADMIN']);
+    if (!row) throw new ApiError('Membro não encontrado.', 404);
+    return { promoted: true };
+  },
+
+  /** Transfere a PROPRIEDADE (created_by) — só o dono; alvo vira/continua ADMIN. */
+  async transferOwnership(groupId: string, ownerId: string, targetId: string) {
+    const owner = await queryOne<{ created_by: string }>(M.ownerOf(), [groupId]);
+    if (!owner) throw new ApiError('Comunidade não encontrada.', 404);
+    if (owner.created_by !== ownerId) throw new ApiError('Só o dono pode transferir a propriedade.', 403);
+    if (ownerId === targetId) throw new ApiError('Você já é o dono.', 400);
+    const isMember = await queryOne(M.isMember(), [groupId, targetId]);
+    if (!isMember) throw new ApiError('O novo dono precisa ser membro da comunidade.', 400);
+    return withTransaction(async (client) => {
+      await client.query(M.setRole(), [groupId, targetId, 'ADMIN']);
+      await client.query(M.transferOwnership(), [groupId, targetId]);
+      return { transferred: true };
+    });
+  },
+
+  async members(groupId: string, viewerId: string, limit = 50, offset = 0) {
+    return query(M.members(), [groupId, viewerId, limit, offset]);
   },
 
   /** Admin remove um membro. */

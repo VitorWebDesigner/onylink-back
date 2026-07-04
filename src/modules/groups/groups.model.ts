@@ -7,7 +7,10 @@ export const groupsModel = {
            g.is_premium, g.is_private, g.member_count, g.created_at,
            EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = g.id AND gm.user_id = $3) AS joined,
            EXISTS (SELECT 1 FROM group_join_requests r WHERE r.group_id = g.id AND r.user_id = $3) AS requested,
-           EXISTS (SELECT 1 FROM user_pins up WHERE up.user_id = $3 AND up.kind = 'community' AND up.target_id = g.id) AS pinned
+           EXISTS (SELECT 1 FROM user_pins up WHERE up.user_id = $3 AND up.kind = 'community' AND up.target_id = g.id) AS pinned,
+           (CASE WHEN EXISTS (SELECT 1 FROM group_members ga WHERE ga.group_id = g.id AND ga.user_id = $3 AND ga.role = 'ADMIN')
+                 THEN (SELECT count(*) FROM group_join_requests jr WHERE jr.group_id = g.id)
+                 ELSE 0 END)::int AS pending_requests
     FROM groups g
     WHERE ($1::text IS NULL OR g.segment = $1)
       AND ($2::text IS NULL OR g.city = $2)
@@ -24,7 +27,10 @@ export const groupsModel = {
            EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = g.id AND gm.user_id = $2) AS joined,
            (SELECT gm.role FROM group_members gm WHERE gm.group_id = g.id AND gm.user_id = $2) AS my_role,
            EXISTS (SELECT 1 FROM group_join_requests r WHERE r.group_id = g.id AND r.user_id = $2) AS requested,
-           EXISTS (SELECT 1 FROM user_pins up WHERE up.user_id = $2 AND up.kind = 'community' AND up.target_id = g.id) AS pinned
+           EXISTS (SELECT 1 FROM user_pins up WHERE up.user_id = $2 AND up.kind = 'community' AND up.target_id = g.id) AS pinned,
+           (CASE WHEN EXISTS (SELECT 1 FROM group_members ga WHERE ga.group_id = g.id AND ga.user_id = $2 AND ga.role = 'ADMIN')
+                 THEN (SELECT count(*) FROM group_join_requests jr WHERE jr.group_id = g.id)
+                 ELSE 0 END)::int AS pending_requests
     FROM groups g
     LEFT JOIN users u ON u.id = g.created_by
     WHERE (g.id::text = $1 OR g.slug = $1)
@@ -52,6 +58,9 @@ export const groupsModel = {
   isMember: () => `SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2 LIMIT 1`,
   memberRole: () => `SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2 LIMIT 1`,
   adminIds: () => `SELECT user_id FROM group_members WHERE group_id = $1 AND role = 'ADMIN'`,
+  ownerOf: () => `SELECT created_by FROM groups WHERE id = $1`,
+  setRole: () => `UPDATE group_members SET role = $3 WHERE group_id = $1 AND user_id = $2 RETURNING user_id`,
+  transferOwnership: () => `UPDATE groups SET created_by = $2 WHERE id = $1`,
 
   addMember: () => `
     INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)
@@ -63,14 +72,16 @@ export const groupsModel = {
 
   bumpMemberCount: () => `UPDATE groups SET member_count = member_count + $2 WHERE id = $1`,
 
+  // $2 = viewer → `followed` (botão Seguir no sheet de ações do membro)
   members: () => `
-    SELECT u.id, u.name, u.handle, p.avatar_path, p.role_title, gm.role, gm.joined_at
+    SELECT u.id, u.name, u.handle, p.avatar_path, p.role_title, gm.role, gm.joined_at,
+           EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = $2 AND f.followee_id = u.id) AS followed
     FROM group_members gm
     JOIN users u ON u.id = gm.user_id
     LEFT JOIN profiles p ON p.user_id = u.id
     WHERE gm.group_id = $1
     ORDER BY (gm.role = 'ADMIN') DESC, gm.joined_at ASC
-    LIMIT $2 OFFSET $3`,
+    LIMIT $3 OFFSET $4`,
 
   /* comunidade PRIVADA — pedidos de entrada */
   addRequest: () => `

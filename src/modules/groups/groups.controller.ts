@@ -34,11 +34,19 @@ export const groupsController = {
   async members(req: Request, res: Response) {
     const limit = Number(req.query.limit ?? 50);
     const offset = Number(req.query.offset ?? 0);
-    send(res, true, await groupsService.members(req.params.id!, limit, offset), 'ok');
+    send(res, true, await groupsService.members(req.params.id!, req.user!.id, limit, offset), 'ok');
   },
 
   async removeMember(req: Request, res: Response) {
     send(res, true, await groupsService.removeMember(req.params.id!, req.user!.id, req.params.userId!), 'Membro removido.');
+  },
+
+  async promote(req: Request, res: Response) {
+    send(res, true, await groupsService.promote(req.params.id!, req.user!.id, req.params.userId!), 'Agora é admin da comunidade.');
+  },
+
+  async transfer(req: Request, res: Response) {
+    send(res, true, await groupsService.transferOwnership(req.params.id!, req.user!.id, req.params.userId!), 'Propriedade transferida.');
   },
 
   async listRequests(req: Request, res: Response) {

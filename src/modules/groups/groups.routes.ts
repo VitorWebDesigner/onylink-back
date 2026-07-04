@@ -17,6 +17,8 @@ router.post('/:id/join', requireAuth, asyncHandler(groupsController.join));
 router.post('/:id/leave', requireAuth, asyncHandler(groupsController.leave));
 router.get('/:id/members', requireAuth, asyncHandler(groupsController.members));
 router.delete('/:id/members/:userId', requireAuth, asyncHandler(groupsController.removeMember));
+router.post('/:id/members/:userId/promote', requireAuth, asyncHandler(groupsController.promote));
+router.post('/:id/members/:userId/transfer', requireAuth, asyncHandler(groupsController.transfer));
 
 // pedidos de entrada (comunidade privada — só admin)
 router.get('/:id/requests', requireAuth, asyncHandler(groupsController.listRequests));
