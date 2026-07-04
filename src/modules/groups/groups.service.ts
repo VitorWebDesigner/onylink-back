@@ -156,10 +156,17 @@ export const groupsService = {
     return query(M.members(), [groupId, viewerId, limit, offset]);
   },
 
-  /** Admin remove um membro. */
+  /** Remoção de membro: admin remove MEMBROS; só o DONO remove outros ADMINs.
+   *  O dono nunca é removido. */
   async removeMember(groupId: string, adminId: string, targetId: string) {
     await requireAdmin(groupId, adminId);
     if (adminId === targetId) throw new ApiError('Use "Sair da comunidade" para se remover.', 400);
+    const owner = await queryOne<{ created_by: string }>(M.ownerOf(), [groupId]);
+    if (owner?.created_by === targetId) throw new ApiError('O dono da comunidade não pode ser removido.', 403);
+    const target = await queryOne<{ role: string }>(M.memberRole(), [groupId, targetId]);
+    if (target?.role === 'ADMIN' && owner?.created_by !== adminId) {
+      throw new ApiError('Só o dono pode remover um admin.', 403);
+    }
     return withTransaction(async (client) => {
       const { rows } = await client.query(M.removeMember(), [groupId, targetId]);
       if (rows.length > 0) await client.query(M.bumpMemberCount(), [groupId, -1]);
