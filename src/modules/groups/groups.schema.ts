@@ -7,8 +7,19 @@ export const createGroupSchema = z.object({
   city: z.string().max(120).optional(),
   coverPath: z.string().max(500).optional(),
   isPremium: z.boolean().optional(),
+  isPrivate: z.boolean().optional(),
 });
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
+
+export const updateGroupSchema = z.object({
+  name: z.string().min(2).max(120).optional(),
+  description: z.string().max(2000).optional(),
+  segment: z.string().max(120).optional(),
+  city: z.string().max(120).optional(),
+  coverPath: z.string().max(500).optional(),
+  isPrivate: z.boolean().optional(),
+});
+export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;
 
 export const listGroupsSchema = z.object({
   segment: z.string().max(120).optional(),

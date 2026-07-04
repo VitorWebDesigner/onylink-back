@@ -3,7 +3,7 @@ import { z } from 'zod';
 // Tipos de imagem aceitos (batem com STORAGE_DIRS em core/storage/paths.ts) —
 // definem em qual pasta do usuário o arquivo é salvo (taxonomia auditável).
 export const IMAGE_KINDS = [
-  'avatar', 'cover', 'companyLogo', 'postImage', 'commentImage', 'opportunityImage', 'storyImage', 'messageImage',
+  'avatar', 'cover', 'companyLogo', 'communityCover', 'postImage', 'commentImage', 'opportunityImage', 'storyImage', 'messageImage',
 ] as const;
 
 /** Upload de imagem via base64 (sem o prefixo data:) — vai no envelope §5.1. */

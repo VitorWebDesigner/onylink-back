@@ -41,6 +41,7 @@ export const STORAGE_DIRS = {
   avatar: 'profile/avatar',
   cover: 'profile/cover',
   companyLogo: 'profile/company',
+  communityCover: 'communities/covers',
   postImage: 'posts/images',
   commentImage: 'comments/images',
   opportunityImage: 'opportunities/images',

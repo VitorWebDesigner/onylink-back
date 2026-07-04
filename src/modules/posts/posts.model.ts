@@ -63,9 +63,13 @@ export const postsModel = {
    * Prioriza conexões/segmento/cidade via utility_score já materializado (CLAUDE §8).
    * Filtros opcionais por categoria/grupo. Paginação por OFFSET (cursor).
    */
+  // Visibilidade de COMUNIDADE (plano-grupos-comunidades §5.1): post com group_id
+  // só aparece DENTRO da comunidade ($3 = groupId, membership checada no service)
+  // OU no feed geral quando o admin o REPOSTOU (featured_at) — com créditos.
   feed: () => `
     SELECT p.id, p.author_id, p.category, p.content, p.like_count, p.comment_count,
            p.repost_count, p.share_count, p.insight_count, p.view_count, p.created_at,
+           p.group_id, p.featured_at, fg.name AS community_name, fu.name AS featured_by_name,
            u.name AS author_name, pr.avatar_path AS author_avatar,
            EXISTS (SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1) AS liked,
            EXISTS (SELECT 1 FROM saved_posts s WHERE s.post_id = p.id AND s.user_id = $1) AS saved,
@@ -78,10 +82,15 @@ export const postsModel = {
     FROM posts p
     JOIN users u ON u.id = p.author_id
     LEFT JOIN profiles pr ON pr.user_id = p.author_id
+    LEFT JOIN groups fg ON fg.id = p.group_id
+    LEFT JOIN users fu ON fu.id = p.featured_by
     ${topCommentLateral('$1')}
     WHERE p.status = 'APPROVED'
       AND ($2::post_category IS NULL OR p.category = $2)
-      AND ($3::uuid IS NULL OR p.group_id = $3)
+      AND (
+        ($3::uuid IS NOT NULL AND p.group_id = $3)
+        OR ($3::uuid IS NULL AND (p.group_id IS NULL OR p.featured_at IS NOT NULL))
+      )
     ORDER BY (p.utility_score
               + CASE WHEN p.author_id IN (
                   SELECT followee_id FROM follows WHERE follower_id = $1
@@ -108,6 +117,7 @@ export const postsModel = {
     LEFT JOIN profiles pr ON pr.user_id = p.author_id
     ${topCommentLateral('$1')}
     WHERE p.status = 'APPROVED' AND p.content ILIKE '%' || $2 || '%'
+      AND (p.group_id IS NULL OR p.featured_at IS NOT NULL)
     ORDER BY p.created_at DESC
     LIMIT $3 OFFSET $4`,
 
@@ -131,6 +141,7 @@ export const postsModel = {
     LEFT JOIN profiles pr ON pr.user_id = p.author_id
     ${topCommentLateral('$1')}
     WHERE p.status = 'APPROVED' AND p.author_id = $2
+      AND (p.group_id IS NULL OR p.featured_at IS NOT NULL)
     ORDER BY (p.pinned_at IS NOT NULL) DESC, p.created_at DESC
     LIMIT $3 OFFSET $4`,
 
@@ -154,6 +165,7 @@ export const postsModel = {
     LEFT JOIN profiles pr ON pr.user_id = p.author_id
     ${topCommentLateral('$1')}
     WHERE reps.user_id = $2 AND p.status = 'APPROVED'
+      AND (p.group_id IS NULL OR p.featured_at IS NOT NULL)
     ORDER BY reps.created_at DESC
     LIMIT $3 OFFSET $4`,
 

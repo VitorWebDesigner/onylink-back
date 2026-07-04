@@ -8,6 +8,7 @@ export type NotificationType =
   | 'COMMENT' | 'REPLY' | 'SUBSCRIBED'       // comentário no seu post / resposta / post que você acompanha
   | 'FOLLOW'                                 // novo seguidor (dedupe)
   | 'APPLICATION'                            // candidatura na sua oportunidade
+  | 'JOIN_REQUEST' | 'JOIN_APPROVED'         // comunidade privada: pedido / aprovação
   | 'CONNECTION' | 'CONNECTION_ACCEPTED' | 'MESSAGE' | 'POST_APPROVED' | 'POST_REJECTED'; // legado/futuro
 
 export interface NotifyPayload {
@@ -15,6 +16,7 @@ export interface NotifyPayload {
   postId?: string;
   commentId?: string;
   opportunityId?: string;
+  groupId?: string;
   preview?: string;
   [k: string]: unknown;
 }
@@ -83,6 +85,21 @@ export const notifyEvents = {
   async application(opportunityId: string, actorId: string) {
     const opp = await queryOne<{ author_id: string; title: string }>(M.opportunityMeta(), [opportunityId]).catch(() => null);
     if (opp) await notify(opp.author_id, 'APPLICATION', { actorId, opportunityId, preview: preview(opp.title) });
+  },
+
+  /** Comunidade privada: pedido de entrada → TODOS os admins. */
+  async joinRequest(groupId: string, groupName: string, actorId: string) {
+    const admins = await query<{ user_id: string }>(
+      `SELECT user_id FROM group_members WHERE group_id = $1 AND role = 'ADMIN'`, [groupId],
+    ).catch(() => []);
+    for (const a of admins) {
+      await notify(a.user_id, 'JOIN_REQUEST', { actorId, groupId, preview: preview(groupName) });
+    }
+  },
+
+  /** Pedido aprovado → quem pediu. */
+  async joinApproved(groupId: string, groupName: string, targetId: string, actorId: string) {
+    await notify(targetId, 'JOIN_APPROVED', { actorId, groupId, preview: preview(groupName) });
   },
 };
 

@@ -61,6 +61,14 @@ function withMedia<T extends { media?: { type: string; path: string }[] }>(row: 
 
 export const postsService = {
   async create(authorId: string, input: CreatePostInput) {
+    // publicar numa comunidade exige ser MEMBRO
+    if (input.groupId) {
+      const member = await queryOne(
+        'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
+        [input.groupId, authorId],
+      );
+      if (!member) throw new ApiError('Você precisa ser membro para publicar nesta comunidade.', 403);
+    }
     const post = await withTransaction(async (client) => {
       const { rows } = await client.query<PostRow>(M.insertPost(), [
         authorId,
@@ -102,6 +110,14 @@ export const postsService = {
   },
 
   async feed(viewerId: string, q: FeedQuery) {
+    // Feed DE COMUNIDADE: só membros veem as publicações (decisão §5.1).
+    if (q.groupId) {
+      const member = await queryOne(
+        'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
+        [q.groupId, viewerId],
+      );
+      if (!member) throw new ApiError('Só membros veem as publicações desta comunidade.', 403);
+    }
     const rows = await query<PostRow>(M.feed(), [
       viewerId,
       q.category ?? null,
