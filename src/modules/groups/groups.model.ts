@@ -10,7 +10,14 @@ export const groupsModel = {
            EXISTS (SELECT 1 FROM user_pins up WHERE up.user_id = $3 AND up.kind = 'community' AND up.target_id = g.id) AS pinned,
            (CASE WHEN EXISTS (SELECT 1 FROM group_members ga WHERE ga.group_id = g.id AND ga.user_id = $3 AND ga.role = 'ADMIN')
                  THEN (SELECT count(*) FROM group_join_requests jr WHERE jr.group_id = g.id)
-                 ELSE 0 END)::int AS pending_requests
+                 ELSE 0 END)::int AS pending_requests,
+           (CASE WHEN EXISTS (SELECT 1 FROM group_members gm3 WHERE gm3.group_id = g.id AND gm3.user_id = $3)
+                 THEN (SELECT count(*) FROM posts p
+                       WHERE p.group_id = g.id AND p.status = 'APPROVED' AND p.author_id <> $3
+                         AND p.created_at > COALESCE(
+                               (SELECT gr.last_seen_at FROM group_reads gr
+                                WHERE gr.user_id = $3 AND gr.group_id = g.id), 'epoch'::timestamptz))
+                 ELSE 0 END)::int AS unread_posts
     FROM groups g
     WHERE ($1::text IS NULL OR g.segment = $1)
       AND ($2::text IS NULL OR g.city = $2)

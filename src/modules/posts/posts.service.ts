@@ -21,6 +21,7 @@ interface PostRow {
   view_count?: number;
   author_followed?: boolean;
   subscribed?: boolean;
+  featured_at?: Date | null;
   created_at: Date;
   author_name?: string;
   author_avatar?: string | null;
@@ -102,11 +103,19 @@ export const postsService = {
     return { id: postId };
   },
 
-  async getOne(postId: string) {
-    const post = await queryOne<PostRow>(M.getById(), [postId]);
+  /** Detalhe standalone na forma do feed (estado do leitor). Post de comunidade
+   *  NÃO destacado só é visível pra membros. */
+  async getOne(viewerId: string, postId: string) {
+    const post = await queryOne<PostRow>(M.getByIdFull(), [viewerId, postId]);
     if (!post) throw new ApiError('Post não encontrado.', 404);
-    const media = await query<{ type: string; path: string }>(M.mediaForPost(), [postId]);
-    return { ...post, media: media.map((m) => mediaUrl(m.type, m.path)) };
+    if (post.group_id && !post.featured_at) {
+      const member = await queryOne(
+        'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
+        [post.group_id, viewerId],
+      );
+      if (!member) throw new ApiError('Só membros veem as publicações desta comunidade.', 403);
+    }
+    return withMedia(post);
   },
 
   async feed(viewerId: string, q: FeedQuery) {
@@ -117,6 +126,12 @@ export const postsService = {
         [q.groupId, viewerId],
       );
       if (!member) throw new ApiError('Só membros veem as publicações desta comunidade.', 403);
+      // marca a comunidade como VISTA (zera badge de posts não vistos) — best-effort
+      void query(
+        `INSERT INTO group_reads (user_id, group_id) VALUES ($1, $2)
+         ON CONFLICT (user_id, group_id) DO UPDATE SET last_seen_at = now()`,
+        [viewerId, q.groupId],
+      ).catch(() => undefined);
     }
     const rows = await query<PostRow>(M.feed(), [
       viewerId,

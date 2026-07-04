@@ -51,6 +51,32 @@ export const postsModel = {
     LEFT JOIN profiles pr ON pr.user_id = p.author_id
     WHERE p.id = $1`,
 
+  // Detalhe STANDALONE na MESMA forma do feed (estado do leitor + mídia + destaque).
+  // Necessário p/ post de COMUNIDADE, que não está no cache do feed geral do app.
+  // $1=viewerId, $2=postId.
+  getByIdFull: () => `
+    SELECT p.id, p.author_id, p.category, p.content, p.like_count, p.comment_count,
+           p.repost_count, p.share_count, p.insight_count, p.view_count, p.created_at,
+           p.group_id, p.featured_at, fg.name AS community_name, fu.name AS featured_by_name,
+           (p.pinned_at IS NOT NULL) AS pinned,
+           u.name AS author_name, pr.avatar_path AS author_avatar,
+           EXISTS (SELECT 1 FROM reactions r WHERE r.post_id = p.id AND r.user_id = $1) AS liked,
+           EXISTS (SELECT 1 FROM saved_posts s WHERE s.post_id = p.id AND s.user_id = $1) AS saved,
+           EXISTS (SELECT 1 FROM post_reposts rp WHERE rp.post_id = p.id AND rp.user_id = $1) AS reposted,
+           EXISTS (SELECT 1 FROM post_shares sh WHERE sh.post_id = p.id AND sh.user_id = $1) AS shared,
+           EXISTS (SELECT 1 FROM post_insights pi WHERE pi.post_id = p.id AND pi.user_id = $1) AS insighted,
+           EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = $1 AND f.followee_id = p.author_id) AS author_followed,
+           EXISTS (SELECT 1 FROM post_subscriptions ps WHERE ps.post_id = p.id AND ps.user_id = $1) AS subscribed,
+           ${MEDIA_JSON},${TOP_COMMENT_COLS}
+    FROM posts p
+    JOIN users u ON u.id = p.author_id
+    LEFT JOIN profiles pr ON pr.user_id = p.author_id
+    LEFT JOIN groups fg ON fg.id = p.group_id
+    LEFT JOIN users fu ON fu.id = p.featured_by
+    ${topCommentLateral('$1')}
+    WHERE p.id = $2 AND p.status = 'APPROVED'
+    LIMIT 1`,
+
   updatePost: () => `
     UPDATE posts SET content = COALESCE($2, content), category = COALESCE($3, category)
     WHERE id = $1 AND author_id = $4

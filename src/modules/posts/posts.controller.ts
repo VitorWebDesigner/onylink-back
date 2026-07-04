@@ -21,7 +21,8 @@ export const postsController = {
   },
 
   async getOne(req: Request, res: Response) {
-    const data = await postsService.getOne(req.params.id!);
+    const viewerId = req.user?.id ?? '00000000-0000-0000-0000-000000000000';
+    const data = await postsService.getOne(viewerId, req.params.id!);
     send(res, true, data, 'ok');
   },
 
