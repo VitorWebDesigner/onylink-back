@@ -109,6 +109,24 @@ export const messagesModel = {
     SELECT min(last_read_at) AS min_read FROM conversation_members
     WHERE conversation_id = $1 AND user_id <> $2`,
 
+  /* CONTATOS = quem eu sigo OU quem me segue (decisão do dono: grupo de chat
+     só com essa rede). Lista alimenta criar grupo/adicionar participantes. */
+  contacts: () => `
+    SELECT u.id, u.name, u.handle, p.avatar_path, p.role_title
+    FROM users u
+    LEFT JOIN profiles p ON p.user_id = u.id
+    WHERE u.id <> $1 AND (
+      EXISTS (SELECT 1 FROM follows f  WHERE f.follower_id  = $1 AND f.followee_id  = u.id)
+      OR EXISTS (SELECT 1 FROM follows f2 WHERE f2.follower_id = u.id AND f2.followee_id = $1)
+    )
+    ORDER BY u.name ASC
+    LIMIT 300`,
+  // ids passados que NÃO são contatos (validação do gate no service)
+  nonContacts: () => `
+    SELECT x.id FROM unnest($2::uuid[]) AS x(id)
+    WHERE NOT EXISTS (SELECT 1 FROM follows f  WHERE f.follower_id  = $1 AND f.followee_id  = x.id)
+      AND NOT EXISTS (SELECT 1 FROM follows f2 WHERE f2.follower_id = x.id AND f2.followee_id = $1)`,
+
   /* fixar (user_pins genérica — kind 'conversation' | 'group', máx 5 por tipo) */
   addPin: () => `INSERT INTO user_pins (user_id, kind, target_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
   removePin: () => `DELETE FROM user_pins WHERE user_id = $1 AND kind = $2 AND target_id = $3`,

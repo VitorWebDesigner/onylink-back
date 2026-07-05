@@ -39,6 +39,13 @@ function requireGroupAdmin(c: ConvRow) {
 
 const preview = (s: string, max = 90) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
+/** Grupo de chat só com a REDE do usuário (segue OU é seguido) — decisão do dono. */
+async function requireContacts(userId: string, ids: string[]) {
+  if (!ids.length) return;
+  const bad = await query<{ id: string }>(M.nonContacts(), [userId, ids]);
+  if (bad.length) throw new ApiError('Só é possível adicionar quem você segue ou te segue.', 400);
+}
+
 export const messagesService = {
   /** Conversas do usuário (1:1 + grupos), fixadas primeiro. */
   async list(userId: string, limit = 50, offset = 0) {
@@ -62,11 +69,17 @@ export const messagesService = {
     return convFor(userId, id);
   },
 
-  /** Cria GRUPO de chat: criador = membro-ADMIN (dono). */
+  /** Lista de CONTATOS (sigo OU me seguem) — candidatos a grupo de chat. */
+  async contacts(userId: string) {
+    return query(M.contacts(), [userId]);
+  },
+
+  /** Cria GRUPO de chat: criador = membro-ADMIN (dono). Só com contatos. */
   async createGroup(userId: string, input: CreateChatGroupInput) {
     const ids = [...new Set(input.memberIds)].filter((id) => id !== userId);
     if (!ids.length) throw new ApiError('Adicione ao menos um participante.', 400);
     if (ids.length + 1 > MAX_CHAT_MEMBERS) throw new ApiError(`Grupo de chat comporta até ${MAX_CHAT_MEMBERS} pessoas.`, 400);
+    await requireContacts(userId, ids);
     const id = await withTransaction(async (client) => {
       const { rows } = await client.query<{ id: string }>(M.insertGroup(), [
         input.name, input.description ?? null, input.photoPath ?? null, userId, ids.length + 1,
@@ -150,6 +163,7 @@ export const messagesService = {
     if (have.size + toAdd.length > MAX_CHAT_MEMBERS) {
       throw new ApiError(`Grupo de chat comporta até ${MAX_CHAT_MEMBERS} pessoas.`, 400);
     }
+    await requireContacts(userId, toAdd);
     for (const uid of toAdd) await query(M.addMember(), [conversationId, uid, 'MEMBER']);
     await query(M.syncMemberCount(), [conversationId]);
     return { added: toAdd.length };

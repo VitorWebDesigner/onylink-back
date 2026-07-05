@@ -14,6 +14,10 @@ export const messagesController = {
     send(res, true, await messagesService.openDm(req.user!.id, req.params.userId!), 'ok');
   },
 
+  async contacts(req: Request, res: Response) {
+    send(res, true, await messagesService.contacts(req.user!.id), 'ok');
+  },
+
   async createGroup(req: Request, res: Response) {
     const data = await messagesService.createGroup(req.user!.id, body<CreateChatGroupInput>(req));
     send(res, true, data, 'Grupo criado!');

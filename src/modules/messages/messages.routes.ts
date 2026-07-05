@@ -11,6 +11,7 @@ const router = Router();
 
 // tudo aqui exige sessão
 router.get('/', requireAuth, asyncHandler(messagesController.list));
+router.get('/contacts', requireAuth, asyncHandler(messagesController.contacts)); // antes de /:id
 router.post('/with/:userId', requireAuth, asyncHandler(messagesController.openDm));
 router.post('/groups', requireAuth, decodePayload, validate(createChatGroupSchema), asyncHandler(messagesController.createGroup));
 
