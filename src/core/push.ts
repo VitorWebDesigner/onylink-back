@@ -51,12 +51,24 @@ export async function sendPush(userId: string, type: NotificationType, payload: 
   const msg = buildMessage(type, actor?.name ?? 'Alguém', payload);
   if (!msg) return;
 
+  // BADGE do ícone do app = sino não lido + mensagens não lidas (todas as
+  // conversas). iOS aplica direto; Android depende do launcher.
+  const badge = await queryOne<{ n: number }>(
+    `SELECT ((SELECT count(*) FROM notifications WHERE user_id = $1 AND read_at IS NULL)
+           + COALESCE((SELECT count(*) FROM messages m
+                       JOIN conversation_members cm
+                         ON cm.conversation_id = m.conversation_id AND cm.user_id = $1
+                       WHERE m.sender_id <> $1 AND m.created_at > cm.last_read_at), 0))::int AS n`,
+    [userId],
+  ).catch(() => null);
+
   const valid = tokens.map((t) => t.token).filter((t) => Expo.isExpoPushToken(t));
   const messages: ExpoPushMessage[] = valid.map((to) => ({
     to,
     sound: 'default',
     title: msg.title,
     body: msg.body,
+    badge: badge?.n ?? undefined,
     data: { url: msg.url },
   }));
 
