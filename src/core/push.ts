@@ -25,6 +25,14 @@ function buildMessage(type: NotificationType, actorName: string, payload: Notify
       body: `${actorName} publicou${preview}`,
       url: payload.groupId ? `/group/${payload.groupId}` : `/post/${payload.postId}`,
     };
+    case 'MESSAGE': {
+      const group = typeof payload.groupName === 'string' && payload.groupName ? payload.groupName : null;
+      return {
+        title: group ?? actorName,
+        body: group ? `${actorName}: ${payload.preview ?? ''}` : (payload.preview ?? 'Nova mensagem'),
+        url: payload.conversationId ? `/chat/${payload.conversationId}` : '/messages',
+      };
+    }
     default: return null; // legados (CONNECTION etc.) sem push por enquanto
   }
 }

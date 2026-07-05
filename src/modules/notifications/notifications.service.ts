@@ -18,6 +18,8 @@ export interface NotifyPayload {
   commentId?: string;
   opportunityId?: string;
   groupId?: string;
+  conversationId?: string;
+  groupName?: string;
   preview?: string;
   [k: string]: unknown;
 }
@@ -36,6 +38,17 @@ export async function notify(userId: string, type: NotificationType, payload: No
     }
   } catch (err) {
     logger.warn({ err, type }, 'notify falhou (ignorado)');
+  }
+}
+
+/** Push SEM linha no sino (ex.: MESSAGE — mensagem é badge da aba Mensagens,
+ *  não notificação social). Best-effort. */
+export async function pushOnly(userId: string, type: NotificationType, payload: NotifyPayload = {}): Promise<void> {
+  try {
+    if (payload.actorId && payload.actorId === userId) return;
+    await enqueue('notifications', 'push', { userId, type, payload }).catch(() => undefined);
+  } catch (err) {
+    logger.warn({ err, type }, 'pushOnly falhou (ignorado)');
   }
 }
 

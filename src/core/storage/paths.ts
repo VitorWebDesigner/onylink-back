@@ -42,6 +42,7 @@ export const STORAGE_DIRS = {
   cover: 'profile/cover',
   companyLogo: 'profile/company',
   communityCover: 'communities/covers',
+  chatGroupPhoto: 'messages/groups',
   postImage: 'posts/images',
   commentImage: 'comments/images',
   opportunityImage: 'opportunities/images',
