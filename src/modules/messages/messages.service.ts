@@ -1,5 +1,6 @@
 import { query, queryOne, withTransaction } from '../../core/db';
 import { ApiError } from '../../core/http';
+import { wsSend } from '../../core/ws';
 import { pushOnly } from '../notifications/notifications.service';
 import { messagesModel as M } from './messages.model';
 import type { AddMembersInput, CreateChatGroupInput, UpdateChatGroupInput } from './messages.schema';
@@ -38,6 +39,16 @@ function requireGroupAdmin(c: ConvRow) {
 }
 
 const preview = (s: string, max = 90) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+
+/** Avisa os OUTROS membros que `userId` leu a conversa (✓✓ ao vivo no 1:1). */
+async function broadcastRead(conversationId: string, userId: string): Promise<void> {
+  const members = await query<{ user_id: string }>(M.memberIds(), [conversationId]).catch(() => []);
+  const at = new Date().toISOString();
+  for (const m of members) {
+    if (m.user_id === userId) continue;
+    wsSend(m.user_id, { type: 'conversation:read', conversationId, userId, at });
+  }
+}
 
 /** Grupo de chat só com a REDE do usuário (segue OU é seguido) — decisão do dono. */
 async function requireContacts(userId: string, ids: string[]) {
@@ -112,7 +123,9 @@ export const messagesService = {
   async messages(userId: string, conversationId: string, limit = 40, offset = 0) {
     const c = await convFor(userId, conversationId);
     const items = await query(M.listMessages(), [conversationId, limit, offset]);
-    void query(M.markRead(), [conversationId, userId]).catch(() => undefined);
+    void query(M.markRead(), [conversationId, userId])
+      .then(() => broadcastRead(conversationId, userId))
+      .catch(() => undefined);
     const read = await queryOne<{ min_read: Date | null }>(M.othersMinRead(), [conversationId, userId]);
     return {
       items,
@@ -121,18 +134,24 @@ export const messagesService = {
     };
   },
 
-  /** Envia mensagem (texto v1) + push aos demais membros (sem linha no sino). */
+  /** Envia mensagem (texto v1): broadcast INSTANTÂNEO via WebSocket a todos
+   *  os membros conectados + push aos demais (sem linha no sino). */
   async send(userId: string, conversationId: string, content: string) {
     const c = await convFor(userId, conversationId);
     const msg = await withTransaction(async (client) => {
-      const { rows } = await client.query(M.insertMessage(), [conversationId, userId, content]);
+      const { rows } = await client.query<{ id: string }>(M.insertMessage(), [conversationId, userId, content]);
       await client.query(M.touchConversation(), [conversationId]);
       await client.query(M.markRead(), [conversationId, userId]);
-      return rows[0];
+      return rows[0]!;
     });
     void (async () => {
-      const members = await query<{ user_id: string }>(M.memberIds(), [conversationId]).catch(() => []);
+      const [members, full] = await Promise.all([
+        query<{ user_id: string }>(M.memberIds(), [conversationId]).catch(() => []),
+        queryOne(M.messageById(), [msg.id]).catch(() => null),
+      ]);
       for (const m of members) {
+        // WS pra TODOS (inclusive o autor — outros aparelhos/abas dele)
+        if (full) wsSend(m.user_id, { type: 'message:new', conversationId, message: full });
         if (m.user_id === userId) continue;
         void pushOnly(m.user_id, 'MESSAGE', {
           actorId: userId,
@@ -145,10 +164,11 @@ export const messagesService = {
     return msg;
   },
 
-  /** Marca a conversa como lida (badge zera). */
+  /** Marca a conversa como lida (badge zera; ✓✓ do outro lado ao vivo). */
   async markRead(userId: string, conversationId: string) {
     await convFor(userId, conversationId);
     await query(M.markRead(), [conversationId, userId]);
+    await broadcastRead(conversationId, userId);
     return { read: true };
   },
 

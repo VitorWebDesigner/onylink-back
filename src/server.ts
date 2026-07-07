@@ -4,6 +4,7 @@ import { env } from './core/env';
 import { logger } from './core/logger';
 import { pingDb, pool } from './core/db';
 import { redis } from './core/redis';
+import { initWs } from './core/ws';
 import { startWorkers } from './workers';
 
 /**
@@ -24,6 +25,7 @@ async function main(): Promise<void> {
   const server: Server = app.listen(env.PORT, () => {
     logger.info(`OnyLink API rodando na porta ${env.PORT} (${env.NODE_ENV})`);
   });
+  initWs(server); // chat em tempo real (upgrade /ws no MESMO servidor/porta)
 
   setupGracefulShutdown(server);
 }

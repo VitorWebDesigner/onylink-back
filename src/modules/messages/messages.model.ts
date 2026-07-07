@@ -100,6 +100,14 @@ export const messagesModel = {
     INSERT INTO messages (conversation_id, sender_id, content)
     VALUES ($1, $2, $3)
     RETURNING id, conversation_id, sender_id, content, created_at`,
+  // mensagem completa (com autor) — payload do broadcast WebSocket
+  messageById: () => `
+    SELECT m.id, m.conversation_id, m.sender_id, m.content, m.created_at,
+           u.name AS sender_name, p.avatar_path AS sender_avatar
+    FROM messages m
+    JOIN users u ON u.id = m.sender_id
+    LEFT JOIN profiles p ON p.user_id = m.sender_id
+    WHERE m.id = $1 LIMIT 1`,
   touchConversation: () => `UPDATE conversations SET last_message_at = now() WHERE id = $1`,
   markRead: () => `
     UPDATE conversation_members SET last_read_at = now()
